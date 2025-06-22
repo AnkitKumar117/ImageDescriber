@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>LLaVA Image Tester</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <h2>🧠 LLaVA Image Uploader</h2>
+
+  <form id="uploadForm" enctype="multipart/form-data">
+    <input type="file" name="image" accept="image/*" required />
+    <br />
+    <button type="submit">Upload & Analyze</button>
+    <br /><br />
+    <label for="prompt"><strong>Optional Prompt:</strong></label><br />
+    <textarea id="prompt" name="prompt" rows="3" placeholder="Enter your custom prompt..."></textarea>
+  </form>
+
+  <h3>📨 LLaVA Response:</h3>
+  <pre id="responseBox"><span class="muted">Upload an image to see results here...</span></pre>
+
+  <hr>
+  <button onclick="fetchImages()">📂 Show Uploaded Images</button>
+  <div id="imageList"></div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const responseBox = document.getElementById('responseBox');
+    const imageList = document.getElementById('imageList');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+
+      // Get prompt from textarea
+      const promptInput = document.getElementById('prompt');
+      const customPrompt = promptInput.value.trim();
+      if (customPrompt) {
+        formData.append('prompt', customPrompt);
+      }
+
+      responseBox.innerHTML = '<span class="blink">Processing...</span>';
+
+      const res = await fetch('/api/images/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      responseBox.textContent = JSON.stringify(data, null, 2);
+    });
+
+
+    async function fetchImages() {
+      const res = await fetch('/api/images');
+      const images = await res.json();
+
+      imageList.innerHTML = '';
+      if (images.length === 0) {
+        imageList.innerHTML = '<p>No uploaded images found.</p>';
+        return;
+      }
+
+      images.forEach(img => {
+        const div = document.createElement('div');
+        div.className = 'image-card';
+
+        const statusClass = {
+          pending: 'badge-pending',
+          completed: 'badge-completed',
+          failed: 'badge-failed'
+        }[img.status] || 'badge-pending';
+
+        const statusText = {
+          pending: 'Pending ⏳',
+          completed: 'Completed ✅',
+          failed: 'Failed ❌'
+        }[img.status] || 'Pending';
+
+        const resultText = img.status === 'completed'
+          ? `<strong>Description:</strong><br/> ${img.description}`
+          : img.status === 'failed'
+            ? `<span style="color: red;"><strong>Failed to process.</strong></span>`
+            : `<em>Waiting for processing...</em>`;
+
+        const completedTime = img.completedAt
+          ? `<small><strong>Completed:</strong> ${new Date(img.completedAt).toLocaleString()}</small><br/>`
+          : '';
+
+        div.classList.add(`card-${img.status}`);
+
+        div.innerHTML = `
+          <img src="/uploads/${img.filename}" alt="${img.file_originalname}" />
+          <div class="image-details">
+            <strong>Original Name:</strong> ${img.file_originalname}<br/>
+            ${resultText}<br/>
+            <div class="status-row">
+              <span class="status-badge ${statusClass}">${statusText}</span>
+              <small><strong>Uploaded:</strong> ${new Date(img.uploadedAt).toLocaleString()}</small><br/>
+              ${completedTime}
+            </div>
+          </div>
+          <button class="delete-btn" onclick="deleteImage('${img._id}')">🗑️ Delete</button>
+        `;
+
+        imageList.appendChild(div);
+      });
+    }
+
+    async function deleteImage(id) {
+      const confirmDelete = confirm('Are you sure you want to delete this image?');
+      if (!confirmDelete) return;
+
+      const res = await fetch(`/api/images/${id}`, {
+        method: 'DELETE'
+      });
+
+      const data = await res.json();
+      alert(data.message || 'Deleted');
+      fetchImages();
+    }
+  </script>
+</body>
+
+</html>
